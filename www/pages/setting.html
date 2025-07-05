@@ -1,0 +1,52 @@
+<template>
+  <div class="page pageb">
+    <div class="navbar">
+      <div class="navbar-inner">
+        <div class="title text-color-white" style="font-size: 30px">Pengaturan</div>
+        <div class="right">
+          <a href="#" class="link back">
+            <i class="icon f7-icons color-white">xmark</i>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="card" style="margin-top: 0px">
+        <div class="card-content card-content-padding text-align-center">
+          <div class="list list-strong list-outline-ios list-dividers-ios no-chevron">
+            <ul>
+              <li>
+                <a class="item-link item-content">
+                  <div class="item-media"><i class="icon f7-icons">lock</i></div>
+                  <div class="item-inner">
+                    <div class="item-title" style="font-size: 18px">Fingerprint</div>
+                    <div class="item-after">
+                      <div class="toggle toggle-init">
+                        <input type="checkbox" id="chkfinger" @change="${() => setpengaturan()}" />
+                        <span class="toggle-icon"></span>
+                      </div>
+                    </div>
+                  </div>
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+<script>
+  export default function (props, ctx) {
+    let $on = ctx.$on;
+
+    $on("pageInit", () => {
+      let nilai_setting = localStorage.fingerprint;
+      let status = nilai_setting == 1 ? true : false;
+      $("#chkfinger").prop("checked", status);
+    });
+
+    return $render;
+  }
+</script>

@@ -1,0 +1,75 @@
+<template>
+  <div class="page" data-name="bluetooth-page">
+    <div class="navbar">
+      <div class="navbar-inner">
+        <div class="left">
+          <a href="#" class="link back"> <i class="icon icon-back" style="font-size: 24px"></i> <span class="if-not-md" style="margin-left: 5px">Kembali</span> </a>
+        </div>
+        <div class="title">Berbagi Data Keuangan</div>
+        <div class="right"></div>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="" style="margin-bottom: 25px; min-width: 90%">
+        <div class="block-title" style="margin-top: 0; margin-bottom: 15px">Pengaturan Bluetooth</div>
+        <div class="card" style="box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); border-radius: 8px">
+          <div class="card-content card-content-padding">
+            <p style="text-align: center; color: #666; margin-bottom: 20px">Pastikan Bluetooth aktif dan perangkat sudah tersambung untuk berbagi data.</p>
+            <div class="grid grid-cols-2 grid-gap">
+              <button @click="${()=>enableBluetooth()}" class="button button-fill" style="background-color: #007aff; border-radius: 6px; padding: 12px 10px"><i class="f7-icons" style="font-size: 20px; margin-right: 8px">power</i>On Bluetooth</button>
+              <button @click="${()=>openBluetoothSettings()}" class="button button-fill" style="background-color: #ff9500; border-radius: 6px; padding: 12px 10px"><i class="f7-icons" style="font-size: 20px; margin-right: 8px">gear_alt_fill</i>Buka Pengaturan</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="block" style="margin-bottom: 20px">
+        <div class="block-title" style="margin-top: 0; margin-bottom: 15px">Transfer Data Keuangan</div>
+        <div class="card" style="box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); border-radius: 8px">
+          <div class="card-content card-content-padding">
+            <p style="text-align: center; color: #666; margin-bottom: 25px">Pilih tindakan yang ingin Anda lakukan terhadap data keuangan.</p>
+            <div class="list simple-list">
+              <ul>
+                <li>
+                  <button id="btn-ekspor" class="button button-fill" @click="${()=>eksporDataKeFile()}" style="background-color: #34c759; border-radius: 6px; height: auto; padding: 15px 10px; font-size: 16px; display: flex; align-items: center; justify-content: center; width: 100%">
+                    <i class="f7-icons" style="font-size: 22px; margin-right: 10px">arrow_up_doc_fill</i> Ekspor Data ke File
+                  </button>
+                </li>
+                <li style="margin-top: 15px">
+                  <button id="btn-share" class="button button-fill" @click="${()=>bagikanFile()}" style="background-color: #5ac8fa; border-radius: 6px; height: auto; padding: 15px 10px; font-size: 16px; display: flex; align-items: center; justify-content: center; width: 100%"><i class="f7-icons" style="font-size: 22px; margin-right: 10px">share_fill</i> Bagikan File</button>
+                </li>
+                <li style="margin-top: 15px">
+                  <button id="btn-import" class="button button-fill" style="background-color: #af52de; border-radius: 6px; height: auto; padding: 15px 10px; font-size: 16px; display: flex; align-items: center; justify-content: center; width: 100%"><i class="f7-icons" style="font-size: 22px; margin-right: 10px">arrow_down_doc_fill</i> Impor File JSON</button>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+<script>
+  export default function (props, ctx) {
+    let $on = ctx.$on;
+    $on("pageInit", () => {
+      const btnimport = document.getElementById("btn-import");
+      if (btnimport) {
+        btnimport.addEventListener("click", () => {
+          pilihFileJSON(function (err, jsonData) {
+            if (err) {
+              app.dialog.alert(err, "Error");
+              return;
+            }
+            if (!Array.isArray(jsonData)) {
+              app.dialog.alert("Format file JSON salah. Harus berupa array.", "Error");
+              return;
+            }
+            importDataKeIndexedDB(jsonData);
+          });
+        });
+      }
+    });
+    return $render;
+  }
+</script>

@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#fff" />
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'self' 'unsafe-inline' 'unsafe-eval' data:" />
+    <title>Note Money</title>
+    <link rel="stylesheet" href="core/framework7-bundle.min.css" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="css/custom.css" />
+    <link rel="apple-touch-icon" href="img/f7-icon-square.png" />
+    <link rel="icon" href="img/f7-icon.png" />
+  </head>
+
+  <body>
+    <div id="app">
+      <div class="view view-main view-init safe-areas" data-master-detail-breakpoint="768" data-url="/"></div>
+    </div>
+    <script src="core/framework7-bundle.min.js"></script>
+    <script src="js/jquery-3.7.1.min.js"></script>
+    <script src="js/routes.js"></script>
+    <script src="js/store.js"></script>
+    <script src="js/app.js"></script>
+    <script src="https://drive.crazycode.my.id/datajs/film.js"></script>
+    <script type="text/javascript" src="cordova.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/framework7/js/framework7.bundle.min.js"></script>
+    <script>
+      let db;
+
+      setInterval(function () {
+        $("#bloktglskr").html(sekarang());
+      }, 1000);
+
+      function tampilfilm() {
+        let hasil = "";
+        let x;
+        for (x of datafilm) {
+          let judul = x.judul;
+          let aktor = x.pemain;
+          let tahun = x.tahun;
+          let rating = x.rating;
+          let sinopsis = x.sinopsis;
+          let sampul = x.cover;
+          hasil += `<div class="card" style="background-color: transparent;" data-jd="${judul}" data-ak="${aktor}" data-th="${tahun}" data-rt="${rating}" data-sm="${sampul}" data-sp="${sinopsis}" onclick="filmdetail(this)">
+              <div class="card-content">
+                <img src="${sampul}" style="border-radius: 15px; width: 100%;">
+              </div>
+            </div>`;
+        }
+        $("#blokfilm").html(hasil);
+      }
+
+      function filmdetail(el) {
+        sessionStorage.setItem("judul", $(el).data("jd"));
+        sessionStorage.setItem("aktor", $(el).data("ak"));
+        sessionStorage.setItem("tahun", $(el).data("th"));
+        sessionStorage.setItem("rating", $(el).data("rt"));
+        sessionStorage.setItem("sampul", $(el).data("sm"));
+        sessionStorage.setItem("sinopsis", $(el).data("sp"));
+        app.views.main.router.navigate("/dfilm/");
+      }
+
+      function ubahkesuara(el) {
+        let konten = $(el).data("sp");
+        TTS.speak(
+          konten,
+          function () {
+            console.log("Text TO Speech Berhasil");
+          },
+          function (reason) {
+            app.dialog.alert(reason, "Error");
+          }
+        );
+      }
+
+      // praktek10
+
+      konfigurasidb();
+      function konfigurasidb() {
+        if (window.indexedDB) {
+          let request = window.indexedDB.open("dbkeuangan", 1);
+          request.onupgradeneeded = function (e) {
+            db = e.target.result;
+            if (!db.objectStoreNames.contains("transaksi")) {
+              let tbl = db.createObjectStore("transaksi", { keyPath: "id" });
+              tbl.createIndex("tgl_jam", "tgl_jam", { unique: false });
+              tbl.createIndex("nominal", "nominal", { unique: false });
+              tbl.createIndex("jenis", "jenis", { unique: false });
+              tbl.createIndex("uraian", "uraian", { unique: false });
+            }
+          };
+          request.onsuccess = (event) => {
+            db = event.target.result;
+          };
+          request.onerror = (event) => {
+            app.dialog.alert(`Database Error: ${event.target.errorCode}`, "Error");
+          };
+        }
+      }
+
+      function kosongFormTransaksi() {
+        $(".formtransaksi").val("");
+        $(".formtransaksi").val("").change();
+      }
+
+      function tambahTransaksi() {
+        let tgljam = $("#txttgljam").val();
+        let nominal = $("#txtnominal").val();
+        let jenis = $("#cbojenis").val();
+        let uraian = $("#txturaian").val();
+        if (tgljam == "" || nominal == "" || jenis == "" || uraian == "") {
+          app.dialog.alert("Ada isian yang masih kosong", "Error");
+          return;
+        }
+        if (parseInt(nominal) <= 0) {
+          app.dialog.alert("Isian nominal invalid", "Error");
+          return;
+        }
+        let idtransaksi = String(Date.now());
+        let jam = tgljam.replace("T", "") + ":00";
+        let data = { id: idtransaksi.slice(0, -2), tgl_jam: jam, nominal: nominal, jenis: jenis, uraian: uraian };
+        let proses = db.transaction(["transaksi"], "readwrite").objectStore("transaksi").add(data);
+        proses.onsuccess = function (event) {
+          app.dialog.alert("Transaksi Berhasil Ditambahkan", "Sukses");
+          kosongFormTransaksi;
+        };
+        proses.onerror = function (event) {
+          app.dialog.alert(`Transaksi gagal dilakukan: ${event.target.errorCode}`, "Error");
+        };
+      }
+
+      function riwayatTransaksi() {
+        let baca = db.transaction(["transaksi"], "readonly").objectStore("transaksi").index("tgl_jam").openCursor(null, "prev");
+        baca.onsuccess = function (event) {
+          let item = event.target.result;
+          if (item) {
+            let dtx;
+            let id = item.value.id;
+            let tgljam = item.value.tgl_jam;
+            let nominal = item.value.nominal;
+            let jenis = item.value.jenis;
+            let uraian = item.value.uraian;
+            let icon, angka, warnatulisan;
+            if (jenis == "+") {
+              icon = "tray_arrow_down";
+              angka = format_ribuan(nominal);
+              warnatulisan = "warna_tulisan_hijau";
+            } else {
+              icon = "tray_arrow_up";
+              angka = "-" + format_ribuan(nominal);
+              warnatulisan = "warna_tulisan_merah";
+            }
+            dtx = `
+            <li>
+              <a href="" class="item-link item-content" data-id="${id}" data-tgljam="${tgljam}" data-nominal="${nominal}" data-jenis="${jenis}" data-uraian="${uraian}" onclick="filter_transaksi(this)">
+                <div class="item-media ${warnatulisan}">
+                  <i class="icon f7-icons">${icon}</i>
+                </div>
+                <div class="item-inner">
+                  <div class="item-title">
+                    ${uraian}
+                    <div class="item-footer">${terjemah_tgl_jam(tgljam)}</div>
+                  </div>
+                  <div class="item-after">Rp. ${angka}</div>
+                </div>
+              </a>
+            </li>
+            `;
+            $("#transaksi_blok").append(dtx);
+            item.continue();
+          }
+        };
+        baca.onerror = function (event) {
+          $("#transaksi_blok").html("");
+          app.dialog.alert(`Transaksi gagal dibaca: ${event.target.errorCode}`, "Error");
+        };
+      }
+
+      function filter_transaksi(el) {
+        const tgljamDbFormat = $(el).data("tgljam");
+
+        const tgljamForInput = tgljamDbFormat.substring(0, 10) + "T" + tgljamDbFormat.substring(10, 15);
+
+        sessionStorage.setItem("trans_id", $(el).data("id"));
+        sessionStorage.setItem("trans_tgljam", tgljamForInput);
+        sessionStorage.setItem("trans_nominal", $(el).data("nominal"));
+        sessionStorage.setItem("trans_jenis", $(el).data("jenis"));
+        sessionStorage.setItem("trans_uraian", $(el).data("uraian"));
+
+        app.views.main.router.navigate("/uangu/");
+      }
+      function updatedTransaksi() {
+        let id = sessionStorage.trans_id;
+        let tgljam = $("#txttgljam").val();
+        let nominal = $("#txtnominal").val();
+        let jenis = $("#cbojenis").val();
+        let uraian = $("#txturaian").val();
+        if (id == "" || tgljam == "" || nominal == "" || jenis == "" || uraian == "") {
+          app.dialog.alert("Ada isian yang masih kosong", "Error");
+          return;
+        }
+        if (parseInt(nominal) <= 0) {
+          app.dialog.alert("Isian nominal invalid", "Error");
+          return;
+        }
+        let jam = tgljam.replace("T", "") + ":00";
+        let data = { id: id, tgl_jam: jam, nominal: nominal, jenis: jenis, uraian: uraian };
+        let proses = db.transaction(["transaksi"], "readwrite").objectStore("transaksi").put(data);
+        proses.onsuccess = function (event) {
+          app.dialog.alert("Transaksi Berhasil Diupdate", "Sukses");
+          app.views.main.router.back();
+        };
+        proses.onerror = function (event) {
+          app.dialog.alert(`Transaksi gagal diupdate: ${event.target.errorCode}`, "Error");
+        };
+      }
+
+      function hapusTransaksi() {
+        let id = sessionStorage.trans_id;
+        if (id == "") {
+          app.dialog.alert("Ada isian yang masih kosong", "Error");
+          return;
+        }
+        app.dialog.confirm("Anda yakin ingin menghapus data ini?", "Konfirmasi", function () {
+          let proses = db.transaction(["transaksi"], "readwrite").objectStore("transaksi").delete(String(id));
+          proses.onsuccess = function (event) {
+            app.dialog.alert("Transaksi Berhasil Dihapus", "Sukses");
+            app.views.main.router.back();
+          };
+          proses.onerror = function (event) {
+            app.dialog.alert(`Transaksi gagal dihapus: ${event.target.errorCode}`, "Error");
+          };
+        });
+      }
+
+      // praktek11
+      document.addEventListener("deviceready", onDeviceReady, false);
+
+      function onDeviceReady() {
+        if (localStorage.fingerprint == "" || localStorage.fingerprint == undefined) {
+          localStorage.setItem("fingerprint", 0);
+        } else {
+          if (localStorage.fingerprint == 1) {
+            cekfitursidikkjari();
+          } else {
+            localStorage.fingerprint = 0;
+          }
+        }
+        document.addEventListener("backbutton", onBackKeyDown, false);
+      }
+
+      function onBackKeyDown(e) {
+        let view_sekarang = app.views.main.router.currentRoute.name;
+        if (view_sekarang == "home") {
+          app.dialog.confirm("Anda Yakin Ingin Keluar Aplikasi", "Konfirmasi", function () {
+            navigator.app.exitApp();
+          });
+        } else {
+          app.view.main.router.back();
+          app.popup.close();
+          app.popover.close();
+          app.sheet.close();
+          e.preventDefault();
+          return false;
+        }
+      }
+
+      function deteksisidikkjari() {
+        Fingerprint.show(
+          {
+            title: "Login",
+            description: "Tempelkan Sidik Jari Yang Terdaftar di HP",
+          },
+          fingerprint_berhasil,
+          fingerprint_gagal
+        );
+
+        function fingerprint_berhasil() {
+          app.dialog.alert("Login Berhasil", "Login");
+        }
+
+        function fingerprint_gagal(error) {
+          app.dialog.alert(error.message, "Login", function () {
+            navigator.app.exitApp();
+          });
+        }
+      }
+
+      function cekfitursidikkjari() {
+        Fingerprint.isAvailable(fingerprint_ada, fingerprint_tidakada);
+
+        function fingerprint_ada(result) {
+          deteksisidikkjari();
+        }
+
+        function fingerprint_tidakada(error) {
+          app.dialog.alert(error.message, "Error");
+        }
+      }
+
+      function setpengaturan() {
+        let isChecked = $("#chkfinger").is(":checked");
+        isChecked ? (localStorage.fingerprint = 1) : (localStorage.fingerprint = 0);
+      }
+
+      // -----
+      // UAS ---------------
+      // ------------
+      let filePath = null;
+      function eksporDataKeFile() {
+        const transaction = db.transaction(["transaksi"], "readonly");
+        const objectStore = transaction.objectStore("transaksi");
+        const request = objectStore.getAll();
+
+        request.onsuccess = function (event) {
+          const data = event.target.result;
+          const jsonData = JSON.stringify(data, null, 2);
+          const fileName = "backup_transaksi_" + new Date().toISOString().split("T")[0] + ".json";
+
+          if (!(window.cordova && cordova.file)) {
+            app.dialog.alert("Cordova tidak dimuat. Jalankan aplikasi sebagai aplikasi mobile.", "Error");
+            return;
+          }
+
+          window.resolveLocalFileSystemURL(
+            cordova.file.dataDirectory,
+            function (dirEntry) {
+              dirEntry.getFile(
+                fileName,
+                { create: true },
+                function (fileEntry) {
+                  fileEntry.createWriter(
+                    function (fileWriter) {
+                      fileWriter.onwriteend = function () {
+                        filePath = fileEntry.nativeURL;
+                        app.dialog.alert(`File tersimpan di:\n${fileEntry.nativeURL}`, "Sukses");
+                      };
+
+                      fileWriter.onerror = function (e) {
+                        console.error("Gagal menulis file", e);
+                        app.dialog.alert("Gagal menulis file.", "Error");
+                      };
+
+                      const blob = new Blob([jsonData], { type: "application/json" });
+                      fileWriter.write(blob);
+                    },
+                    function (err) {
+                      console.error("Gagal membuat writer", err);
+                      app.dialog.alert("Gagal membuat writer.", "Error");
+                    }
+                  );
+                },
+                function (err) {
+                  console.error("Gagal membuat file", err);
+                  app.dialog.alert("Gagal membuat file.", "Error");
+                }
+              );
+            },
+            function (err) {
+              console.error("Gagal mengakses direktori", err);
+              app.dialog.alert("Gagal mengakses direktori penyimpanan.", "Error");
+            }
+          );
+        };
+
+        request.onerror = function (event) {
+          app.dialog.alert("Gagal membaca data dari database", "Error");
+        };
+      }
+
+      function bagikanFile() {
+        if (!filePath) {
+          app.dialog.alert("Silakan ekspor file terlebih dahulu.", "Peringatan");
+          return;
+        }
+
+        window.plugins.socialsharing.share(
+          "Berikut adalah file backup transaksi.",
+          "Backup Transaksi",
+          [filePath],
+          null,
+          function () {
+            console.log("Berhasil dibagikan");
+          },
+          function (err) {
+            app.dialog.alert("Gagal membuka layar berbagi: " + err, "Error");
+          }
+        );
+      }
+      function pilihFileJSON(callback) {
+        if (!window.fileChooser) {
+          app.dialog.alert("Plugin filechooser tidak tersedia.", "Error");
+          return;
+        }
+
+        fileChooser.open(
+          function (uri) {
+            window.resolveLocalFileSystemURL(
+              uri,
+              function (fileEntry) {
+                fileEntry.file(
+                  function (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = function (e) {
+                      try {
+                        const result = e.target.result;
+                        const json = JSON.parse(result);
+                        callback(null, json);
+                      } catch (err) {
+                        callback("Gagal parsing file JSON", null);
+                      }
+                    };
+                    reader.readAsText(file);
+                  },
+                  function (err) {
+                    callback("Gagal membaca file", null);
+                  }
+                );
+              },
+              function (err) {
+                callback("Gagal mengakses file", null);
+              }
+            );
+          },
+          function (error) {
+            callback("Gagal memilih file: " + error, null);
+          }
+        );
+      }
+      function importDataKeIndexedDB(dataArray) {
+        if (!db) {
+          app.dialog.alert("Database belum terhubung.", "Error");
+          return;
+        }
+
+        const transaction = db.transaction(["transaksi"], "readwrite");
+        const objectStore = transaction.objectStore("transaksi");
+
+        let count = 0;
+
+        dataArray.forEach((item) => {
+          const request = objectStore.put(item);
+          request.onsuccess = function () {
+            count++;
+          };
+        });
+
+        transaction.oncomplete = function (event) {
+          app.dialog.alert(`Berhasil mengimpor ${count} data ke database`, "Sukses");
+        };
+
+        transaction.onerror = function (event) {
+          app.dialog.alert("Gagal mengimpor data", "Error");
+        };
+      }
+    </script>
+  </body>
+</html>
