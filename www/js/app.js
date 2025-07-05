@@ -141,6 +141,15 @@ document.addEventListener("deviceready", () => {
   };
 });
 
+// praktek13 -----------
+function handleBackupButtonClick() {
+  const backupSection = document.getElementById("backupSection");
+  if (backupSection) {
+    backupSection.style.display = "block";
+  }
+}
+
+
 // UAS --------------
 function enableBluetooth() {
   ble.enable(

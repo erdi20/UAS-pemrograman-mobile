@@ -19,6 +19,7 @@
     <div id="app">
       <div class="view view-main view-init safe-areas" data-master-detail-breakpoint="768" data-url="/"></div>
     </div>
+    <script src="https://code.highcharts.com/highcharts.js"></script>
     <script src="core/framework7-bundle.min.js"></script>
     <script src="js/jquery-3.7.1.min.js"></script>
     <script src="js/routes.js"></script>
@@ -94,6 +95,7 @@
           };
           request.onsuccess = (event) => {
             db = event.target.result;
+            muatDataDanChart();
           };
           request.onerror = (event) => {
             app.dialog.alert(`Database Error: ${event.target.errorCode}`, "Error");
@@ -304,6 +306,210 @@
       function setpengaturan() {
         let isChecked = $("#chkfinger").is(":checked");
         isChecked ? (localStorage.fingerprint = 1) : (localStorage.fingerprint = 0);
+      }
+
+      // praktek13
+      function getDataFull(tabel) {
+        return new Promise((resolve, reject) => {
+          let proses = db.transaction([tabel], "readonly").objectStore(tabel).getAll();
+          proses.onsuccess = function (e) {
+            let allData = e.target.result;
+            if (!Array.isArray(allData)) {
+              allData = typeof allData === "object" && allData !== null ? [allData] : [];
+            }
+            if (tabel === "transaksi") {
+              allData = allData.map((item) => {
+                if (item.tgl_jam) {
+                  item.tgl_jam = item.tgl_jam
+                    .replace("T", " ")
+                    .replace(/\.\d{3}Z/, "")
+                    .split(".")[0];
+                }
+                return item;
+              });
+            }
+            resolve(allData);
+          };
+          proses.onerror = function (e) {
+            console.error(`Gagal: Data ${tabel}, ${e.target.errorCode}`);
+            reject([]);
+          };
+        });
+      }
+      function perbaikiFormatTanggal(tgl) {
+        if (!tgl) return "";
+        tgl = tgl.replace("T", " ").replace(/\.\d+/, "").replace("Z", "");
+        const patternTanpaSpasi = /^(\d{4}-\d{2}-\d{2})(\d{2}:\d{2}:\d{2})$/;
+        if (patternTanpaSpasi.test(tgl)) {
+          tgl = tgl.replace(patternTanpaSpasi, "$1 $2");
+        }
+        return tgl.trim();
+      }
+      async function backup_transaksi() {
+        let nama = $("#txtnamabackup").val();
+        if (!nama) {
+          app.dialog.alert("Isian Nama Backup Tidak Tersedia", "Error");
+          return;
+        }
+        app.dialog.progress("Proses Backup ....");
+        try {
+          let dttransaksi = await getDataFull("transaksi");
+          if (dttransaksi.length > 0) {
+            let dtx = "";
+            for (let x of dttransaksi) {
+              let id = x.id;
+              let deskripsi = x.uraian;
+              let waktu = perbaikiFormatTanggal(x.tgl_jam);
+              let nominal = x.nominal;
+              let jenis = x.jenis;
+              dtx += `${id}|${deskripsi}|${waktu}|${nominal}|${jenis}#`;
+            }
+            const response = await fetch("https://erdim.ftiunwaha.my.id/lrv12/api/backup", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                nama_backup: nama,
+                dtx: btoa(dtx.slice(0, -1)),
+              }),
+            });
+            const textResponse = await response.text();
+            let data;
+            try {
+              data = JSON.parse(textResponse);
+            } catch (e) {
+              console.error("Respons bukan JSON:", textResponse);
+              app.dialog.alert("Server mengembalikan respons tidak valid.", "Error");
+              app.dialog.close();
+              return;
+            }
+            app.dialog.close();
+            if (data.kode === "1") {
+              app.dialog.alert(`Sukses: ${data.pesan} Berhasil: ${data.berhasil}, Gagal: ${data.gagal}`, "Berhasil");
+              $("#txtnamabackup").val("");
+              $("#frmbackup").css("display", "none");
+            } else {
+              app.dialog.alert(`Gagal: ${data.pesan}`, "Error");
+            }
+          } else {
+            app.dialog.close();
+            app.dialog.alert("Data Transaksi Yang Akan di Backup Tidak Tersedia", "Info");
+          }
+        } catch (e) {
+          app.dialog.close();
+          app.dialog.alert("Gagal Tidak Terhubung dengan Server", "Error");
+          console.error(e);
+        }
+      }
+
+      // modul grafik
+      function rentangBulan(awalTahun, akhirTahun) {
+        const months = [];
+        for (let year = awalTahun; year <= akhirTahun; year++) {
+          for (let month = 1; month <= 12; month++) {
+            const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+            months.push(monthKey);
+          }
+        }
+        return months;
+      }
+
+      function muatDataDanChart() {
+        const transaction = db.transaction("transaksi", "readonly");
+        const store = transaction.objectStore("transaksi");
+        const getAllRequest = store.getAll();
+
+        getAllRequest.onsuccess = function (event) {
+          const transaksiList = event.target.result;
+
+          const dataByMonth = {};
+
+          transaksiList.forEach((transaksi) => {
+            const nominal = parseFloat(transaksi.nominal);
+            if (isNaN(nominal)) return;
+
+            const rawDate = transaksi.tgl_jam;
+            if (!rawDate || typeof rawDate !== "string") return;
+
+            const tglOnly = rawDate.split("T")[0];
+            const [tahun, bulan] = tglOnly.split("-");
+            const monthKey = `${tahun}-${bulan}`;
+
+            if (!dataByMonth[monthKey]) {
+              dataByMonth[monthKey] = { pemasukan: 0, pengeluaran: 0 };
+            }
+
+            if (transaksi.jenis === "+") {
+              dataByMonth[monthKey].pemasukan += nominal;
+            } else if (transaksi.jenis === "-") {
+              dataByMonth[monthKey].pengeluaran += nominal;
+            }
+          });
+
+          const currentYear = new Date().getFullYear();
+          const allMonths = rentangBulan(currentYear, currentYear);
+
+          const categories = [];
+          const pemasukanData = [];
+          const pengeluaranData = [];
+
+          allMonths.forEach((monthKey) => {
+            const [year, monthNum] = monthKey.split("-");
+            const monthName = terjemahanbulan[parseInt(monthNum)]; 
+            categories.push(`${monthName} ${year}`);
+
+            const dataForMonth = dataByMonth[monthKey] || { pemasukan: 0, pengeluaran: 0 };
+            pemasukanData.push(dataForMonth.pemasukan);
+            pengeluaranData.push(dataForMonth.pengeluaran);
+          });
+
+          tampilChart({
+            categories,
+            pemasukan: pemasukanData,
+            pengeluaran: pengeluaranData,
+          });
+        };
+
+        getAllRequest.onerror = function (event) {
+          app.dialog.alert("Gagal mengambil data dari database.");
+        };
+      }
+      //
+      function tampilChart(data) {
+        Highcharts.chart("container", {
+          chart: {
+            type: "line",
+          },
+          title: {
+            text: "Rekap Keuangan",
+          },
+          xAxis: {
+            categories: data.categories,
+          },
+          yAxis: {
+            title: {
+              text: "Nominal (Rp)",
+            },
+          },
+          plotOptions: {
+            line: {
+              dataLabels: {
+                enabled: true,
+              },
+            },
+          },
+          series: [
+            {
+              name: "Pemasukan",
+              data: data.pemasukan,
+            },
+            {
+              name: "Pengeluaran",
+              data: data.pengeluaran,
+            },
+          ],
+        });
       }
 
       // -----
